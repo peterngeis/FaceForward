@@ -154,7 +154,9 @@ Both `train` and `run` call the same `learned_vector`, so the math is identical 
 
 **1a. Local contrast (CLAHE, OpenCV).** The frame is converted to CIE LAB and only the lightness channel $L$ is changed. The 320×180 frame is split into a 4×4 grid of tiles. In each tile the 256-bin histogram $h$ is clipped at $c = 2.0 \cdot \frac{\text{tile pixels}}{256}$, the clipped excess is spread evenly over all bins, and the tile's mapping is its cumulative distribution:
 
-$$T(v) = \frac{255}{N}\sum_{u \le v} \tilde h(u)$$
+```math
+T(v) = \frac{255}{N}\sum_{u \le v} \tilde h(u)
+```
 
 Each pixel's new value is a bilinear blend of the mappings of the four nearest tiles. Dark regions get stretched more than bright ones, which reduces (not removes) day/night differences. Color channels $a, b$ are untouched.
 
@@ -162,69 +164,91 @@ Each pixel's new value is a bilinear blend of the mappings of the four nearest t
 
 **1c. Gradients.** Central differences, zero on the 1-pixel border:
 
-$$g_x(i,j) = Y(i,j{+}1) - Y(i,j{-}1), \qquad g_y(i,j) = Y(i{+}1,j) - Y(i{-}1,j)$$
+```math
+g_x(i,j) = Y(i,j{+}1) - Y(i,j{-}1), \qquad g_y(i,j) = Y(i{+}1,j) - Y(i{-}1,j)
+```
 
-$$m = \sqrt{g_x^2 + g_y^2}, \qquad \theta = \operatorname{atan2}(g_y, g_x) \bmod 180^\circ$$
+```math
+m = \sqrt{g_x^2 + g_y^2}, \qquad \theta = \mathrm{atan2}(g_y, g_x) \bmod 180^\circ
+```
 
 Orientation is *unsigned* (0–180°), so a dark-to-light edge and a light-to-dark edge at the same angle are equivelent; with the goal of hair-vs-wall and skin-vs-shadow edges comparable across lighting.
 
 **1d. Cell histograms.** $B = 9$ bins of $20^\circ$. With $u = \theta / 20^\circ$, $k_0 = \lfloor u \rfloor \bmod 9$, $k_1 = (k_0 + 1) \bmod 9$, $f = u - \lfloor u \rfloor$, each pixel splits its magnitude between the two nearest bins of its 8×8 cell $c$:
 
-$$H_c[k_0] \mathrel{+}= m\,(1-f), \qquad H_c[k_1] \mathrel{+}= m\,f$$
+```math
+H_c[k_0] \mathrel{+}= m\,(1-f), \qquad H_c[k_1] \mathrel{+}= m\,f
+```
 
 **1e. Block normalization (L2-Hys).** Every 2×2 group of neighboring cells forms a block vector $v \in \mathbb{R}^{36}$ (blocks overlap by one cell, so a 64×48 crop gives 7×5 = 35 blocks). With $\varepsilon = 10^{-6}$:
 
-$$v \leftarrow \frac{v}{\sqrt{\lVert v\rVert_2^2 + \varepsilon}}, \qquad v \leftarrow \min(v,\, 0.2), \qquad v \leftarrow \frac{v}{\sqrt{\lVert v\rVert_2^2 + \varepsilon}}$$
+```math
+v \leftarrow \frac{v}{\sqrt{\lVert v\rVert_2^2 + \varepsilon}}, \qquad v \leftarrow \min(v,\, 0.2), \qquad v \leftarrow \frac{v}{\sqrt{\lVert v\rVert_2^2 + \varepsilon}}
+```
 
 The clip at 0.2 stops one very strong edge (e.g. a window frame) from dominating a block.
 
-**Goal is to ignore lighting differences durring inference:** if the crop changes as $Y \to aY + c$ (exposure gain $a$, brightness offset $c$), then $g \to a\,g$ (the offset cancels in the difference), every histogram scales by $a$, and block normalization divides $a$ back out. So the HOG vector is unchanged. What it *does* respond to is the arrangement of edge directions: a frontal face has symmetric eye/nose/jaw edges, a profile does not.
+**Goal is to ignore lighting differences during inference:** if the crop changes as $Y \to aY + c$ (exposure gain $a$, brightness offset $c$), then $`g \to a\,g`$ (the offset cancels in the difference), every histogram scales by $a$, and block normalization divides $a$ back out. So the HOG vector is unchanged. What it *does* respond to is the arrangement of edge directions: a frontal face has symmetric eye/nose/jaw edges, a profile does not.
 
-**1f. Pair vector.** $x = [\,\text{HOG}_{\text{left}},\ \text{HOG}_{\text{right}}\,] \in \mathbb{R}^{2520}$.
+**1f. Pair vector.** $`x = [\,\text{HOG}_{\text{left}},\ \text{HOG}_{\text{right}}\,] \in \mathbb{R}^{2520}`$.
 
 ### 2. Training (`train.py`, `model.py`)
 
 **2a. Augmentation.** Each photo pair yields the original plus `augment.copies` synthetic copies. Each camera of each copy draws its own seeded random values. Applied to the 320×180 frame prior to step 1.
 
-*Position*: angle $\alpha \sim U(-r, r)$ (`rotate_deg`), scale $s \sim U(1-S, 1+S)$ (`scale`), shift $t_x \sim U(-t, t)\,W$, $t_y \sim U(-t, t)\,H$ (`shift`). About the frame center $(c_x, c_y)$, with $a = s\cos\alpha$, $b = s\sin\alpha$:
+*Position*: angle $\alpha \sim U(-r, r)$ (`rotate_deg`), scale $s \sim U(1-S, 1+S)$ (`scale`), shift $`t_x \sim U(-t, t)\,W`$, $`t_y \sim U(-t, t)\,H`$ (`shift`). About the frame center $(c_x, c_y)$, with $a = s\cos\alpha$, $b = s\sin\alpha$:
 
-$$\begin{bmatrix} x' \\ y' \end{bmatrix} = \begin{bmatrix} a & b \\ -b & a \end{bmatrix} \begin{bmatrix} x \\ y \end{bmatrix} + \begin{bmatrix} (1-a)c_x - b\,c_y + t_x \\ b\,c_x + (1-a)c_y + t_y \end{bmatrix}$$
+```math
+\begin{bmatrix} x' \\ y' \end{bmatrix} = \begin{bmatrix} a & b \\ -b & a \end{bmatrix} \begin{bmatrix} x \\ y \end{bmatrix} + \begin{bmatrix} (1-a)c_x - b\,c_y + t_x \\ b\,c_x + (1-a)c_y + t_y \end{bmatrix}
+```
 
 Pixels sampled from outside the frame repeat the nearest edge pixel.
 
-*Lighting*, on $x = I/255$ per channel: white balance $t \sim U(-w, w)$ gives $x_B \leftarrow (1-t)x_B$, $x_R \leftarrow (1+t)x_R$; gain $k \sim U(1-g, 1+g)$ gives $x \leftarrow kx$; contrast $c \sim U(1-C, 1+C)$ about the image mean $\mu$ gives $x \leftarrow (x - \mu)c + \mu$; gamma $\gamma = e^{U(\ln\gamma_{lo},\, \ln\gamma_{hi})}$ gives $x \leftarrow \operatorname{clip}(x, 0, 1)^{\gamma}$. Sampling $\ln\gamma$ uniformly makes "brighter by ×1.6" as likely as "darker by ×1.6".
+*Lighting*, on $x = I/255$ per channel: white balance $t \sim U(-w, w)$ gives $x_B \leftarrow (1-t)x_B$, $x_R \leftarrow (1+t)x_R$; gain $k \sim U(1-g, 1+g)$ gives $x \leftarrow kx$; contrast $c \sim U(1-C, 1+C)$ about the image mean $\mu$ gives $x \leftarrow (x - \mu)c + \mu$; gamma $`\gamma = e^{U(\ln\gamma_{lo},\, \ln\gamma_{hi})}`$ gives $x \leftarrow \mathrm{clip}(x, 0, 1)^{\gamma}$. Sampling $\ln\gamma$ uniformly makes "brighter by ×1.6" as likely as "darker by ×1.6".
 
 **2b. Standardization.** Over the $n$ training rows (real + augmented), per feature $j$:
 
-$$\mu_j = \frac{1}{n}\sum_i x_{ij}, \qquad \sigma_j = \sqrt{\frac{1}{n}\sum_i (x_{ij}-\mu_j)^2} + 10^{-6}, \qquad z_{ij} = \frac{x_{ij} - \mu_j}{\sigma_j}$$
+```math
+\mu_j = \frac{1}{n}\sum_i x_{ij}, \qquad \sigma_j = \sqrt{\frac{1}{n}\sum_i (x_{ij}-\mu_j)^2} + 10^{-6}, \qquad z_{ij} = \frac{x_{ij} - \mu_j}{\sigma_j}
+```
 
 $\mu$ and $\sigma$ are saved in `weights.npz` and reused unchanged at inference.
 
 **2c. Model: softmax regression.** Parameters $W \in \mathbb{R}^{2520 \times 3}$, $b \in \mathbb{R}^3$:
 
-$$s_i = W^{\top} z_i + b, \qquad p_{ik} = \frac{e^{\,s_{ik} - \max_j s_{ij}}}{\sum_{l} e^{\,s_{il} - \max_j s_{ij}}}$$
+```math
+s_i = W^{\top} z_i + b, \qquad p_{ik} = \frac{e^{\,s_{ik} - \max_j s_{ij}}}{\sum_{l} e^{\,s_{il} - \max_j s_{ij}}}
+```
 
 Subtracting the max doesn't change $p$ but prevents overflow. The model is linear: each class score is a weighted sum of HOG values, so a weight $W_{jk}$ says how much edge-direction feature $j$ votes for class $k$.
 
 **2d. Sample weights.** With `train.weighting: session_class`, row $i$ in session $\sigma(i)$ with label $y_i$ gets
 
-$$w_i = \frac{1}{n_{\sigma(i),\,y_i}}, \qquad \omega_i = \frac{w_i}{\sum_r w_r}$$
+```math
+w_i = \frac{1}{n_{\sigma(i),\,y_i}}, \qquad \omega_i = \frac{w_i}{\sum_r w_r}
+```
 
 where $n_{s,k}$ counts rows (real + augmented) of class $k$ in session $s$. Every (session, class) cell then carries the same total weight $1/(\text{number of cells})$, whether it has 50 or 2000 frames. (`class` uses $n_k$ instead; `none` uses $w_i = 1$.)
 
 **2e. Loss: weighted cross-entropy + L2.** With one-hot labels $Y_{ik}$:
 
-$$\mathcal{L}(W, b) = -\sum_{i} \omega_i \sum_{k} Y_{ik} \log\!\left(p_{ik} + 10^{-9}\right) + \frac{\lambda}{2}\,\lVert W \rVert_F^2$$
+```math
+\mathcal{L}(W, b) = -\sum_{i} \omega_i \sum_{k} Y_{ik} \log\!\left(p_{ik} + 10^{-9}\right) + \frac{\lambda}{2}\,\lVert W \rVert_F^2
+```
 
 The first term is small when the model gives the true class high probability. The second (`train.l2`, $\lambda = 0.1$) penalizes large weights: it keeps the model from betting everything on a few features that happen to identify one session, and it keeps probabilities away from 0.00/1.00. The bias $b$ is not penalized.
 
 **2f. Gradients and updates.** Because $\partial \mathcal{L} / \partial s_{ik} = \omega_i (p_{ik} - Y_{ik})$ for softmax + cross-entropy:
 
-$$\nabla_W \mathcal{L} = Z^{\top}\!\left[\,\omega \odot (P - Y)\,\right] + \lambda W, \qquad \nabla_b \mathcal{L} = \sum_i \omega_i\,(p_i - Y_i)$$
+```math
+\nabla_W \mathcal{L} = Z^{\top}\!\left[\,\omega \odot (P - Y)\,\right] + \lambda W, \qquad \nabla_b \mathcal{L} = \sum_i \omega_i\,(p_i - Y_i)
+```
 
 Full-batch gradient descent, for `train.epochs` = 400 steps with learning rate $\eta$ = `train.lr` = 0.25, starting from $W_{jk} \sim \mathcal{N}(0, 0.01^2)$, $b = 0$:
 
-$$W \leftarrow W - \eta\,\nabla_W \mathcal{L}, \qquad b \leftarrow b - \eta\,\nabla_b \mathcal{L}$$
+```math
+W \leftarrow W - \eta\,\nabla_W \mathcal{L}, \qquad b \leftarrow b - \eta\,\nabla_b \mathcal{L}
+```
 
 The loss is convex, so there is a single best $(W, b)$ and the result does not depend on luck. The printed "final loss" includes the $\frac{\lambda}{2}\lVert W\rVert^2$ term.
 
@@ -234,23 +258,29 @@ The loss is convex, so there is a single best $(W, b)$ and the result does not d
 2. Train a fresh model on all the *other* trainable sessions.
 3. Predict the classification of each real photo in $s$, $\hat y_i = \arg\max_k p_{ik}$, and record that session's accuracy:
 
-$$\text{acc}_s = \frac{\text{correct predictions in } s}{\text{photos in } s}$$
+```math
+\text{acc}_s = \frac{\text{correct predictions in } s}{\text{photos in } s}
+```
 
 4. Repeat for every session, so each one gets a turn as the test set.
 
-`train` prints the accuracy for each session, then the average over sessions, $\frac{1}{|\mathcal{S}|}\sum_s \text{acc}_s$, so a short session counts as much as a long one. It also prints the recall for each class, i.e. how often a photo that really was left / right / away was predicted as that class, $\text{recall}_k = \frac{\#\{\hat y = k,\ y = k\}}{\#\{y = k\}}$, pooled over every held-out photo, and a 3×3 matrix. For reference, random guessing between three classes scores 33%, A session with low accuracy indicates conditions the other sessions don't cover, so collecting another session like it helps.
+`train` prints the accuracy for each session, then the average over sessions, $\frac{1}{|\mathcal{S}|}\sum_s \text{acc}_s$, so a short session counts as much as a long one. It also prints the recall for each class, i.e. how often a photo that really was left / right / away was predicted as that class, $\text{recall}_k = \frac{n(\hat y = k,\ y = k)}{n(y = k)}$, pooled over every held-out photo, and a 3×3 matrix. For reference, random guessing between three classes scores 33%, A session with low accuracy indicates conditions the other sessions don't cover, so collecting another session like it helps.
 
 ### 3. Inference (`run.py`, `hysteresis.py`)
 
-**3a. Scores.** Every $1/$`infer.hz` s (50 ms at 20 Hz), the newest frame from each camera is resized to 320×180, turned into $x$ by step 1 (no augmentation), standardized with the *saved* $\mu, \sigma$, and scored: $p = \operatorname{softmax}(W^{\top} z + b) = (p_L, p_R, p_A)$. Then
+**3a. Scores.** Every 1/`infer.hz` s (50 ms at 20 Hz), the newest frame from each camera is resized to 320×180, turned into $x$ by step 1 (no augmentation), standardized with the *saved* $\mu, \sigma$, and scored: $p = \mathrm{softmax}(W^{\top} z + b) = (p_L, p_R, p_A)$. Then
 
-$$(s_L, s_R) = \begin{cases} \text{skip this update} & \text{if } \arg\max p = \text{away and } p_A > 0.55 \\ (p_L,\ p_R) & \text{otherwise} \end{cases}$$
+```math
+(s_L, s_R) = \begin{cases} \text{skip this update} & \text{if } \arg\max p = \text{away and } p_A > 0.55 \\ (p_L,\ p_R) & \text{otherwise} \end{cases}
+```
 
 Skipping means "looking away" freezes the current camera rather than switching.
 
 **3b. Smoothing (EMA).** With $\alpha$ = `ema_alpha` (0.5), starting at $e_L = e_R = 0.5$:
 
-$$e_L \leftarrow (1-\alpha)\,e_L + \alpha\,s_L, \qquad e_R \leftarrow (1-\alpha)\,e_R + \alpha\,s_R$$
+```math
+e_L \leftarrow (1-\alpha)\,e_L + \alpha\,s_L, \qquad e_R \leftarrow (1-\alpha)\,e_R + \alpha\,s_R
+```
 
 A single update moves each average halfway toward the new score, so a one-frame misclassification only moves it partway.
 
