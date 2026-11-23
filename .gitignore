@@ -1,0 +1,43 @@
+# --- Trained model (personal: fit to one user's face) ---
+weights.npz
+*.npz
+
+# --- Collected dataset (photos of a real person + session metadata) ---
+# Each user collects their own with `python -m faceforward.collect`.
+dataset/
+*.jsonl
+*.jsonl.bak*
+
+# --- Large media / screen recordings ---
+*.webp
+*.mp4
+*.mkv
+*.mov
+*.avi
+*.gif
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.venv/
+venv/
+env/
+
+# --- Tooling ---
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# --- Editors / OS ---
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
+desktop.ini
+*:Zone.Identifier

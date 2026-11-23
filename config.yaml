@@ -1,0 +1,73 @@
+# FaceForward settings. See README.md for what each section does.
+
+# Cameras. name_contains is matched (case-insensitive) against the device names that
+# `py -3 -m faceforward.devices` prints; fallback_index is used if nothing matches.
+# Two identical cameras can share the same name_contains: left gets the first match,
+# right gets the second.
+left:
+  name_contains: "C922"
+  fallback_index: 0
+  fov_deg: 78                      # informational only
+  roi: [0.20, 0.80, 0.00, 0.80]    # head region [x0, x1, y0, y1] as frame fractions (cyan box)
+right:
+  name_contains: "C930"
+  fallback_index: 1
+  fov_deg: 90
+  roi: [0.40, 0.95, 0.05, 0.85]
+
+# Capture is requested as MJPG; two 1080p30 streams is about 60 JPEG decodes per second.
+# Lower the resolution if your cameras or USB bus can't keep up.
+capture:
+  width: 1920
+  height: 1080
+  fps: 30
+  backend: dshow   # DirectShow (Windows)
+
+# What Zoom / Teams / Discord receive from the virtual camera.
+output:
+  width: 1920
+  height: 1080
+  fps: 30
+
+# Frames are downscaled to this size for the left/right decision, hz times per second.
+infer:
+  width: 320
+  height: 180
+  hz: 20
+
+# Switching behavior (seconds / score margins).
+hysteresis:
+  min_dwell_s: 0.25   # how long you must face a camera before it switches
+  holdoff_s: 0.4     # no switching back this soon after a switch
+  tau: 0.15          # minimum score margin to consider a switch
+  ema_alpha: 0.5     # score smoothing; higher reacts faster
+
+# Data collection. Each run of collect is one session; many short, varied sessions
+# beat a few long ones.
+collect:
+  save_hz: 1.0              # pairs saved per second while recording (keep moving)
+  target_per_class: 100     # per-session goal for left, right and away
+  discard_incomplete: true  # quit before every class hits the goal -> delete that session
+
+train:
+  l2: 0.1                   # regularization; higher = less overconfident
+  weighting: session_class  # session_class | class | none
+  min_session_classes: 2    # sessions with fewer classes are only used for validation
+  validation: loso          # loso (leave-one-session-out) | newest | none
+  epochs: 400
+  lr: 0.25
+
+# Training only: random lighting and head-position copies of every photo pair,
+# applied independently per camera.
+augment:
+  copies: 3              # 0 = off
+  gamma: [0.6, 1.6]      # <1 brighter, >1 darker
+  gain: 0.3              # exposure ±30%
+  contrast: 0.25         # ±25%
+  white_balance: 0.15    # warm vs cool light, ±15% red/blue
+  scale: 0.12            # closer/farther, ±12%
+  shift: 0.08            # slouch / lean, ±8% of frame
+  rotate_deg: 5          # head tilt, ±5°
+
+dataset_dir: dataset
+weights: weights.npz   # created by `py -3 -m faceforward.train`; required by run

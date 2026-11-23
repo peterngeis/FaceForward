@@ -1,0 +1,5 @@
+numpy>=1.24
+opencv-python>=4.8
+pyvirtualcam>=0.11
+pyyaml>=6.0
+pygrabber>=0.1; platform_system == "Windows"
